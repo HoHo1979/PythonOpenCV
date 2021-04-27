@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+<title>Camera</title>
+<script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+<style type="text/css">
+	#webcam {
+		height: 40vh;
+		width: 100%;
+		background: #000;
+	}
+	#result {
+		height: 40vh;
+		width: 100%;
+		overflow: auto;
+		border:1px solid #666;
+	}
+</style>
+</head>
+<body>
+	<select id="cameraList"></select>
+	<button id="open">開啟攝影機</button>
+	<button id="close" disabled>關閉攝影機</button>
+	<br/>
+	<video id="webcam"></video>
+	<div id="result"></div>
+	<script type="text/javascript">
+	var openCameraURL="{{openCamera}}";
+	var closeCameraURL="{{closeCamera}}";
+	var useDriveId="";
+	navigator.mediaDevices.enumerateDevices().then(function(devices) {
+		devices.forEach(function(device) {
+			if(device.kind =="videoinput"){
+				cameraList.innerHTML+='<option value="'+device.deviceId+'">'+device.label+'</option>';
+			}
+		});
+	}).catch(function(err) {
+		console.log(err.name + ": " + err.message);
+	});
+	navigator.getUserMedia || (navigator.getUserMedia = navigator.mozGetUserMedia ||
+	navigator.webkitGetUserMedia || navigator.msGetUserMedia);
+	if (!navigator.getUserMedia) {
+		window.alert("您的瀏覽器不支援！");
+	}
+	var ajaxStatus=true;
+	document.getElementById("open").onclick=function(e) {
+		this.disabled=true;
+		document.getElementById("close").disabled=false;
+		navigator.getUserMedia({
+			video:{
+				deviceId:document.querySelector("#cameraList").value
+			},
+			audio: false
+		}, function(stream) {
+			var video = document.getElementById("webcam");
+			video.srcObject = stream;
+			video.autoplay = true;
+			video.ontimeupdate=function(){
+				const video = document.getElementById("webcam");
+				const canvas = document.createElement("canvas");
+				canvas.width = video.videoWidth;
+				canvas.height = video.videoHeight;
+				canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+				canvas.toBlob(function(blobData){
+					if(ajaxStatus==true){
+						ajaxStatus=false;
+						var data=new FormData();
+						data.append("image",new Blob([blobData], {type : "image/jpeg"}));
+						$.ajax({
+							"url": openCameraURL,
+							"data": data,
+							"cache": false,
+							"contentType": false,
+							"processData": false,
+							"method": "POST",
+							"timeout": 20000
+						}).done(function(d){
+							if(typeof d=="string"&&d!=""){
+								$("#result").prepend('<p>'+d+'</p>');
+							}
+							ajaxStatus=true;
+						}).fail(function() {
+							ajaxStatus=true;
+						});
+					}
+				},"image/jpeg",0.8);
+			};
+		}, function() {
+
+		});
+	};
+	document.getElementById("close").onclick=function(e){
+		this.disabled=true;
+		document.getElementById("open").disabled=false;
+		var video = document.getElementById("webcam");
+		video.srcObject.getTracks().forEach(function(track) {
+	        if (track.readyState=="live") {
+	            track.stop();
+	        }
+	    });
+		if(ajaxStatus==true){
+			ajaxStatus=false;
+		    $.get(closeCameraURL,function(){
+		    	ajaxStatus=true;
+		    });
+		}
+	};
+	</script>
+</body>
+</html>
